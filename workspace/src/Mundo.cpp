@@ -12,6 +12,12 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#define RUTA_MEM "/tmp/mem_tenis"
+
 #define RUTA_FIFO "/tmp/fifo_tenis"
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -25,6 +31,9 @@ CMundo::CMundo()
 CMundo::~CMundo()
 {
 	if (fd_fifo >= 0) close(fd_fifo);
+
+	if (datos != NULL && datos != MAP_FAILED)
+		munmap(datos, sizeof(DatosMemCompartida));
 }
 
 void CMundo::InitGL()
@@ -117,7 +126,16 @@ void CMundo::OnDraw()
 }
 
 void CMundo::OnTimer(int value)
-{	
+{
+	if (datos != NULL && datos != MAP_FAILED)
+	{
+		datos->esfera = esfera;
+		datos->raqueta1 = jugador1;
+		if (datos->accion == 1)
+			OnKeyboardDown('w', 0, 0);
+		else if (datos->accion == -1)
+			OnKeyboardDown('s', 0, 0);
+	}	
 	jugador1.Mueve(0.025f);
 	jugador2.Mueve(0.025f);
 	esfera.Mueve(0.025f);
@@ -224,4 +242,35 @@ void CMundo::Init()
 	{
 		perror("Error al abrir la FIFO en tenis (ejecuta logger primero)");
 	}
-}
+	puntos1 = 0;
+	puntos2 = 0;
+	fd_fifo = open(RUTA_FIFO, O_WRONLY);
+	if (fd_fifo < 0)
+	{
+		perror("Error al abrir la FIFO en tenis (ejecuta logger primero)");
+	}
+
+	// <--- AQUÍ VA EL BLOQUE NUEVO (DENTRO DE Init):
+	int fd_mem = open(RUTA_MEM, O_RDWR | O_CREAT | O_TRUNC, 0666);
+	if (fd_mem == -1)
+	{
+		perror("Error al crear el archivo de memoria compartida");
+		datos = NULL;
+	}
+	else
+	{
+		ftruncate(fd_mem, sizeof(DatosMemCompartida));
+		datos = (DatosMemCompartida*)mmap(NULL, sizeof(DatosMemCompartida), PROT_READ | PROT_WRITE, MAP_SHARED, fd_mem, 0);
+		if (datos == MAP_FAILED)
+		{
+			perror("Error en mmap de Mundo");
+			datos = NULL;
+		}
+		else
+		{
+			datos->accion = 0;
+		}
+		close(fd_mem);
+	}
+} 
+
