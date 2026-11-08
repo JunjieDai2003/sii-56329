@@ -10,6 +10,9 @@
 #include <string.h>
 #include <math.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+#define RUTA_FIFO "/tmp/fifo_tenis"
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
@@ -21,7 +24,7 @@ CMundo::CMundo()
 
 CMundo::~CMundo()
 {
-
+	if (fd_fifo >= 0) close(fd_fifo);
 }
 
 void CMundo::InitGL()
@@ -135,6 +138,12 @@ void CMundo::OnTimer(int value)
 		esfera.velocidad.x=2+2*rand()/(float)RAND_MAX;
 		esfera.velocidad.y=2+2*rand()/(float)RAND_MAX;
 		puntos2++;
+		if (fd_fifo >= 0)
+		{
+			char msg[128];
+			sprintf(msg, "Jugador 2 marca 1 punto, lleva un total de %d puntos.\n", puntos2);
+			write(fd_fifo, msg, strlen(msg));
+		}
 	}
 
 	if(fondo_dcho.Rebota(esfera))
@@ -144,6 +153,22 @@ void CMundo::OnTimer(int value)
 		esfera.velocidad.x=-2-2*rand()/(float)RAND_MAX;
 		esfera.velocidad.y=-2-2*rand()/(float)RAND_MAX;
 		puntos1++;
+		if (fd_fifo >= 0)
+		{
+			char msg[128];
+			sprintf(msg, "Jugador 1 marca 1 punto, lleva un total de %d puntos.\n", puntos1);
+			write(fd_fifo, msg, strlen(msg));
+		}
+	}
+	if (puntos1 >= 3 || puntos2 >= 3)
+	{
+		printf("Fin de la partida. Marcador: Jugador 1 (%d) - Jugador 2 (%d)\n", puntos1, puntos2);
+		if (fd_fifo >= 0)
+		{
+			close(fd_fifo);
+			fd_fifo = -1;
+		}
+		exit(0);
 	}
 
 }
@@ -192,4 +217,11 @@ void CMundo::Init()
 	jugador2.g=0;
 	jugador2.x1=6;jugador2.y1=-1;
 	jugador2.x2=6;jugador2.y2=1;
+        puntos1 = 0;
+	puntos2 = 0;
+	fd_fifo = open(RUTA_FIFO, O_WRONLY);
+	if (fd_fifo < 0)
+	{
+		perror("Error al abrir la FIFO en tenis (ejecuta logger primero)");
+	}
 }
